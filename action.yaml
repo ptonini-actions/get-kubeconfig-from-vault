@@ -39,43 +39,45 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: install vault
-      run: |
+    # Install HashiCorp Vault #################################################
+    - run: |
         export VERSION=$(gh release list --repo hashicorp/vault -L 1 | grep Latest | awk '{sub(/v/,X,$0);print $1}')
         wget -q https://releases.hashicorp.com/vault/${VERSION}/vault_${VERSION}_linux_amd64.zip
         sudo unzip vault_${VERSION}_linux_amd64.zip vault -d /usr/bin
       shell: bash
 
-    - name: load vault address
-      if: inputs.vault_addr
+    # Load Vault address ######################################################
+    - if: inputs.vault_addr
       run: echo "VAULT_ADDR=${{ inputs.vault_addr }}" >> ${GITHUB_ENV}
       shell: bash
 
-    - name: load vault token
-      if: inputs.vault_token
+    # Load Vault token ########################################################
+    - if: inputs.vault_token
       run: echo "VAULT_TOKEN=${{ inputs.vault_token }}" >> ${GITHUB_ENV}
       shell: bash
 
-    - name: generate service account token
-      run: echo "SERVICE_ACCOUNT_TOKEN=$(vault write -force -field service_account_token ${{ inputs.vault_kubernetes_backend }}/creds/${{ inputs.vault_kubernetes_role }})" >> ${GITHUB_ENV}
+    # Fetch service account token #############################################
+    - run: echo "SERVICE_ACCOUNT_TOKEN=$(vault write -force -field service_account_token ${{ inputs.vault_kubernetes_backend }}/creds/${{ inputs.vault_kubernetes_role }})" >> ${GITHUB_ENV}
       shell: bash
 
-    - name: fetch kubernetes cluster host
-      run:  echo "KUBERNETES_HOST=$(vault read -field kubernetes_host ${{ inputs.vault_kubernetes_backend }}/config)" >> ${GITHUB_ENV}
-      shell: bash
-
-    - name: fetch kubernetes cluster ca certificate
-      run: echo "KUBERNETES_CA_CERT=$(vault read -field kubernetes_ca_cert ${{ inputs.vault_kubernetes_backend }}/config | base64 -w 0)" >> ${GITHUB_ENV}
-      shell: bash
-             
-    - name: generate kubeconfig file
-      run: |
-        echo "KUBECONFIG=${KUBECONFIG}" >> ${GITHUB_ENV}
+    # Fetch kubernetes host ###################################################
+    - run: |
+        echo "KUBERNETES_HOST=$(vault read -field kubernetes_host ${{ inputs.vault_kubernetes_backend }}/config)" >> ${GITHUB_ENV}
         echo "::add-mask::${KUBERNETES_HOST}"
+      shell: bash
+
+    # Fetch kubernetes CA token ###############################################
+    - run: | 
+        echo "KUBERNETES_CA_CERT=$(vault read -field kubernetes_ca_cert ${{ inputs.vault_kubernetes_backend }}/config | base64 -w 0)" >> ${GITHUB_ENV}
         echo "::add-mask::${KUBERNETES_CA_CERT}"
+      shell: bash
+
+    # Generate kubeconfig file ################################################
+    - run: |
         mkdir -p ${{ github.workspace }}/.kube
         echo "${{ inputs.kubeconfig_template }}" | envsubst | tee -a ${KUBECONFIG}
         chmod 0600 ${KUBECONFIG}
+        echo "KUBECONFIG=${KUBECONFIG}" >> ${GITHUB_ENV}
       shell: bash
       env:
         KUBECONFIG: ${{ github.workspace }}/.kube/config
